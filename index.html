@@ -166,47 +166,49 @@ const db=firebase.firestore();
 </div>
 
 <script>
-// Load real alert count from Firestore
 async function loadStats(){
+  const tag=document.getElementById('motor-alert-tag');
   try{
-    const tag=document.getElementById('motor-alert-tag');
-    // Get all equipment and records
     const [eqSnap,recSnap]=await Promise.all([
       db.collection('equipment').get(),
-      db.collection('records').orderBy('date','desc').get()
+      db.collection('records').get()
     ]);
-    const eqs=eqSnap.docs.map(d=>({id:d.id,...d.data()}));
-    const recs=recSnap.docs.map(d=>({id:d.id,...d.data()}));
-    // Get latest record per equipment
+    const eqs=eqSnap.docs.map(d=>({...d.data(),id:d.id}));
+    const recs=recSnap.docs.map(d=>({...d.data(),id:d.id}));
+    // Latest record per tag
     const latest={};
-    recs.forEach(r=>{if(!latest[r.tag]||r.date>latest[r.tag].date)latest[r.tag]=r;});
-    // Count alerts
+    recs.forEach(r=>{
+      if(!r.tag)return;
+      if(!latest[r.tag]||String(r.date)>String(latest[r.tag].date))latest[r.tag]=r;
+    });
     let alerts=0;
     eqs.forEach(eq=>{
-      const r=latest[eq.tag];if(!r)return;
+      const r=latest[eq.tag];
+      if(!r)return;
       const mAl=parseFloat(eq.motorVibAlarm||eq.vibAlarm||4.5);
       const pAl=parseFloat(eq.pumpVibAlarm||eq.vibAlarm||4.5);
       const vib=r.vib||{};
-      const mVals=[vib.mDV,vib.mDH,vib.mDA,vib.mNV,vib.mNH,vib.mNA].map(v=>parseFloat(v)||0);
-      const pVals=[vib.pDV,vib.pDH,vib.pDA,vib.pNV,vib.pNH,vib.pNA].map(v=>parseFloat(v)||0);
-      const hasAlarm=mVals.some(v=>v>=mAl)||pVals.some(v=>v>=pAl);
+      const allVals=[
+        [vib.mDV,vib.mDH,vib.mDA,vib.mNV,vib.mNH,vib.mNA,mAl],
+        [vib.pDV,vib.pDH,vib.pDA,vib.pNV,vib.pNH,vib.pNA,pAl]
+      ];
+      let alarm=false;
+      allVals.forEach(arr=>{
+        const lim=arr.pop();
+        arr.forEach(v=>{if(parseFloat(v)>=lim)alarm=true;});
+      });
       const brg=r.brg||{};
-      const hasBrgAlarm=(brg.deC&&brg.deC!=='ok')||(brg.ndeC&&brg.ndeC!=='ok');
-      if(hasAlarm||hasBrgAlarm)alerts++;
+      if(brg.deC&&brg.deC!=='ok')alarm=true;
+      if(brg.ndeC&&brg.ndeC!=='ok')alarm=true;
+      if(alarm)alerts++;
     });
-    // Update tag
     if(tag){
-      if(alerts>0){
-        tag.textContent='⚠ '+alerts+' Alert'+(alerts>1?'s':'');
-        tag.className='tag tag-alert';
-      }else{
-        tag.textContent='✓ All Normal';
-        tag.className='tag tag-active';
-      }
+      if(alerts>0){tag.textContent='⚠ '+alerts+' Alert'+(alerts>1?'s':'');tag.className='tag tag-alert';}
+      else{tag.textContent='✓ All Normal';tag.className='tag tag-active';}
     }
   }catch(e){
-    const tag=document.getElementById('motor-alert-tag');
-    if(tag)tag.textContent='⚠ —';
+    console.error('loadStats error:',e);
+    if(tag)tag.textContent='⚠ Error';
   }
 }
 loadStats();
