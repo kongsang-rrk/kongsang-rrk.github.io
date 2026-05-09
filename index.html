@@ -100,7 +100,7 @@ body{display:flex;flex-direction:column;align-items:center;padding:48px 20px 64p
     <div class="card-desc">Vibration Analysis, Electrical Test, Bearing Inspection, Operating Data</div>
     <div class="card-footer">
       <div class="tag-row">
-        <span class="tag tag-active">✓ Active</span>
+        <span class="tag tag-active" id="motor-lastpm-tag">📅 Loading...</span>
         <span class="tag tag-alert" id="motor-alert-tag">⚠ Loading...</span>
       </div>
       <span class="arrow">→</span>
@@ -214,6 +214,15 @@ async function loadStats(){
       if(brg.ndeC&&brg.ndeC!=='ok')alarm=true;
       if(alarm)alerts++;
     });
+    // Last PM date
+    const lp=recs.reduce((m,r)=>String(r.date)>m?String(r.date):m,'');
+    const lpTag=document.getElementById('motor-lastpm-tag');
+    if(lpTag&&lp){
+      // Format date Thai style
+      const d=new Date(lp+'T00:00:00');
+      const months=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+      lpTag.textContent='📅 Last PM: '+d.getDate()+' '+months[d.getMonth()]+' '+(d.getFullYear()+543);
+    }
     if(tag){
       if(alerts>0){tag.textContent='⚠ '+alerts+' Alert'+(alerts>1?'s':'');tag.className='tag tag-alert';}
       else{tag.textContent='✓ All Normal';tag.className='tag tag-active';}
@@ -221,6 +230,8 @@ async function loadStats(){
   }catch(e){
     console.error(e);
     if(tag){tag.textContent='⚠ —';tag.className='tag tag-alert';}
+    const lpTag=document.getElementById('motor-lastpm-tag');
+    if(lpTag)lpTag.textContent='📅 —';
   }
 }
 loadStats();
