@@ -68,13 +68,7 @@ body{display:flex;flex-direction:column;align-items:center;padding:48px 20px 64p
 
 @media(max-width:600px){.title{font-size:22px}.grid{grid-template-columns:1fr}.stat-bar{gap:20px}}
 </style>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-<script>
-const firebaseConfig={apiKey:"AIzaSyAIIFtJVieyqEpLmqqqn6cOqT_VOICuxmw",authDomain:"check-sheet-motor.firebaseapp.com",projectId:"check-sheet-motor",storageBucket:"check-sheet-motor.firebasestorage.app",messagingSenderId:"726291252984",appId:"1:726291252984:web:952912afbe890c4546dd0d"};
-firebase.initializeApp(firebaseConfig);
-const db=firebase.firestore();
-</script>
+
 </head>
 <body>
 
@@ -166,16 +160,41 @@ const db=firebase.firestore();
 </div>
 
 <script>
+// Use Firestore REST API — no auth required if rules allow read
+const PROJECT='check-sheet-motor';
+const API_KEY='AIzaSyAIIFtJVieyqEpLmqqqn6cOqT_VOICuxmw';
+const BASE=`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
+
+async function fsGet(col,pageSize=500){
+  const res=await fetch(`${BASE}/${col}?pageSize=${pageSize}&key=${API_KEY}`);
+  if(!res.ok)throw new Error('HTTP '+res.status);
+  const json=await res.json();
+  return (json.documents||[]).map(d=>{
+    const fields=d.fields||{};
+    const obj={};
+    Object.entries(fields).forEach(([k,v])=>{
+      if(v.stringValue!==undefined)obj[k]=v.stringValue;
+      else if(v.integerValue!==undefined)obj[k]=parseFloat(v.integerValue);
+      else if(v.doubleValue!==undefined)obj[k]=parseFloat(v.doubleValue);
+      else if(v.booleanValue!==undefined)obj[k]=v.booleanValue;
+      else if(v.mapValue)obj[k]=parseMap(v.mapValue.fields||{});
+    });
+    return obj;
+  });
+}
+function parseMap(fields){
+  const obj={};
+  Object.entries(fields).forEach(([k,v])=>{
+    if(v.stringValue!==undefined)obj[k]=v.stringValue;
+    else if(v.integerValue!==undefined)obj[k]=parseFloat(v.integerValue);
+    else if(v.doubleValue!==undefined)obj[k]=parseFloat(v.doubleValue);
+  });
+  return obj;
+}
 async function loadStats(){
   const tag=document.getElementById('motor-alert-tag');
   try{
-    const [eqSnap,recSnap]=await Promise.all([
-      db.collection('equipment').get(),
-      db.collection('records').get()
-    ]);
-    const eqs=eqSnap.docs.map(d=>({...d.data(),id:d.id}));
-    const recs=recSnap.docs.map(d=>({...d.data(),id:d.id}));
-    // Latest record per tag
+    const [eqs,recs]=await Promise.all([fsGet('equipment'),fsGet('records')]);
     const latest={};
     recs.forEach(r=>{
       if(!r.tag)return;
@@ -183,20 +202,13 @@ async function loadStats(){
     });
     let alerts=0;
     eqs.forEach(eq=>{
-      const r=latest[eq.tag];
-      if(!r)return;
+      const r=latest[eq.tag];if(!r)return;
       const mAl=parseFloat(eq.motorVibAlarm||eq.vibAlarm||4.5);
       const pAl=parseFloat(eq.pumpVibAlarm||eq.vibAlarm||4.5);
       const vib=r.vib||{};
-      const allVals=[
-        [vib.mDV,vib.mDH,vib.mDA,vib.mNV,vib.mNH,vib.mNA,mAl],
-        [vib.pDV,vib.pDH,vib.pDA,vib.pNV,vib.pNH,vib.pNA,pAl]
-      ];
       let alarm=false;
-      allVals.forEach(arr=>{
-        const lim=arr.pop();
-        arr.forEach(v=>{if(parseFloat(v)>=lim)alarm=true;});
-      });
+      [vib.mDV,vib.mDH,vib.mDA,vib.mNV,vib.mNH,vib.mNA].forEach(v=>{if(parseFloat(v)>=mAl)alarm=true;});
+      [vib.pDV,vib.pDH,vib.pDA,vib.pNV,vib.pNH,vib.pNA].forEach(v=>{if(parseFloat(v)>=pAl)alarm=true;});
       const brg=r.brg||{};
       if(brg.deC&&brg.deC!=='ok')alarm=true;
       if(brg.ndeC&&brg.ndeC!=='ok')alarm=true;
@@ -207,8 +219,8 @@ async function loadStats(){
       else{tag.textContent='✓ All Normal';tag.className='tag tag-active';}
     }
   }catch(e){
-    console.error('loadStats error:',e);
-    if(tag)tag.textContent='⚠ Error';
+    console.error(e);
+    if(tag){tag.textContent='⚠ —';tag.className='tag tag-alert';}
   }
 }
 loadStats();
