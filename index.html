@@ -100,8 +100,7 @@ body{display:flex;flex-direction:column;align-items:center;padding:48px 20px 64p
     <div class="card-desc">Vibration Analysis, Electrical Test, Bearing Inspection, Operating Data</div>
     <div class="card-footer">
       <div class="tag-row">
-        <span class="tag tag-active" id="motor-lastpm-tag">📅 Loading...</span>
-        <span class="tag tag-alert" id="motor-alert-tag">⚠ Loading...</span>
+        <span class="tag tag-active">✓ Active</span>
       </div>
       <span class="arrow">→</span>
     </div>
@@ -162,79 +161,6 @@ body{display:flex;flex-direction:column;align-items:center;padding:48px 20px 64p
   <div>Built with Firebase + GitHub Pages | <a href="https://kongsang-rrk.github.io/pm-inspection/">PM Motor →</a></div>
 </div>
 
-<script>
-// Use Firestore REST API — no auth required if rules allow read
-const PROJECT='check-sheet-motor';
-const API_KEY='AIzaSyAIIFtJVieyqEpLmqqqn6cOqT_VOICuxmw';
-const BASE=`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
 
-async function fsGet(col,pageSize=500){
-  const res=await fetch(`${BASE}/${col}?pageSize=${pageSize}&key=${API_KEY}`);
-  if(!res.ok)throw new Error('HTTP '+res.status);
-  const json=await res.json();
-  return (json.documents||[]).map(d=>{
-    const fields=d.fields||{};
-    const obj={};
-    Object.entries(fields).forEach(([k,v])=>{
-      if(v.stringValue!==undefined)obj[k]=v.stringValue;
-      else if(v.integerValue!==undefined)obj[k]=parseFloat(v.integerValue);
-      else if(v.doubleValue!==undefined)obj[k]=parseFloat(v.doubleValue);
-      else if(v.booleanValue!==undefined)obj[k]=v.booleanValue;
-      else if(v.mapValue)obj[k]=parseMap(v.mapValue.fields||{});
-    });
-    return obj;
-  });
-}
-function parseMap(fields){
-  const obj={};
-  Object.entries(fields).forEach(([k,v])=>{
-    if(v.stringValue!==undefined)obj[k]=v.stringValue;
-    else if(v.integerValue!==undefined)obj[k]=parseFloat(v.integerValue);
-    else if(v.doubleValue!==undefined)obj[k]=parseFloat(v.doubleValue);
-  });
-  return obj;
-}
-async function loadStats(){
-  const alertTag=document.getElementById('motor-alert-tag');
-  const lpTag=document.getElementById('motor-lastpm-tag');
-  try{
-    const [eqs,recs]=await Promise.all([fsGet('equipment'),fsGet('records')]);
-    // Last PM date from all records
-    const lp=recs.reduce((m,r)=>r.date&&String(r.date)>m?String(r.date):m,'');
-    if(lpTag&&lp){
-      const parts=lp.split('-');
-      if(parts.length===3){
-        const months=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-        lpTag.textContent='📅 Last PM: '+parseInt(parts[2])+' '+months[parseInt(parts[1])-1]+' '+(parseInt(parts[0])+543);
-      }
-    }
-    // Count alerts
-    const latest={};
-    recs.forEach(r=>{if(r.tag&&(!latest[r.tag]||String(r.date||'')>String(latest[r.tag].date||'')))latest[r.tag]=r;});
-    let alerts=0;
-    eqs.forEach(eq=>{
-      const r=latest[eq.tag];if(!r)return;
-      const mAl=parseFloat(eq.motorVibAlarm||2.8),pAl=parseFloat(eq.pumpVibAlarm||5.1);
-      const vib=r.vib||{};
-      let alarm=false;
-      [vib.mDV,vib.mDH,vib.mDA,vib.mNV,vib.mNH,vib.mNA].forEach(v=>{if(parseFloat(v||0)>=mAl)alarm=true;});
-      [vib.pDV,vib.pDH,vib.pDA,vib.pNV,vib.pNH,vib.pNA].forEach(v=>{if(parseFloat(v||0)>=pAl)alarm=true;});
-      const brg=r.brg||{};
-      if(brg.deC&&brg.deC!=='ok')alarm=true;
-      if(brg.ndeC&&brg.ndeC!=='ok')alarm=true;
-      if(alarm)alerts++;
-    });
-    if(alertTag){
-      if(alerts>0){alertTag.textContent='⚠ '+alerts+' Alert'+(alerts>1?'s':'');alertTag.className='tag tag-alert';}
-      else{alertTag.textContent='✓ All Normal';alertTag.className='tag tag-active';}
-    }
-  }catch(e){
-    console.error('loadStats:',e);
-    if(alertTag)alertTag.textContent='⚠ —';
-    if(lpTag)lpTag.textContent='📅 —';
-  }
-}
-loadStats();
-</script>
 </body>
 </html>
