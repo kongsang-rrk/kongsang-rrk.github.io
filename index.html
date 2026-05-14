@@ -107,12 +107,7 @@ body{display:flex;flex-direction:column;align-items:center;padding:48px 20px 64p
     </div>
   </a>
 
-</div>
-
-<div class="section-label">🔧 Coming Soon</div>
-<div class="grid">
-
-  <!-- PM Transformer -->
+  <!-- PM Transformer — Active -->
   <a href="https://kongsang-rrk.github.io/pm-transformer/" class="card card-transformer">
     <div class="card-icon icon-transformer">🔌</div>
     <div class="card-name">PM Transformer</div>
@@ -124,6 +119,11 @@ body{display:flex;flex-direction:column;align-items:center;padding:48px 20px 64p
       <span class="arrow">→</span>
     </div>
   </a>
+
+</div>
+
+<div class="section-label">🔧 Coming Soon</div>
+<div class="grid">
 
   <!-- PM SWG -->
   <div class="card card-swg card-coming">
@@ -195,45 +195,42 @@ function parseMap(fields){
   return obj;
 }
 async function loadStats(){
-  const tag=document.getElementById('motor-alert-tag');
+  const alertTag=document.getElementById('motor-alert-tag');
+  const lpTag=document.getElementById('motor-lastpm-tag');
   try{
     const [eqs,recs]=await Promise.all([fsGet('equipment'),fsGet('records')]);
+    // Last PM date from all records
+    const lp=recs.reduce((m,r)=>r.date&&String(r.date)>m?String(r.date):m,'');
+    if(lpTag&&lp){
+      const parts=lp.split('-');
+      if(parts.length===3){
+        const months=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+        lpTag.textContent='📅 Last PM: '+parseInt(parts[2])+' '+months[parseInt(parts[1])-1]+' '+(parseInt(parts[0])+543);
+      }
+    }
+    // Count alerts
     const latest={};
-    recs.forEach(r=>{
-      if(!r.tag)return;
-      if(!latest[r.tag]||String(r.date)>String(latest[r.tag].date))latest[r.tag]=r;
-    });
+    recs.forEach(r=>{if(r.tag&&(!latest[r.tag]||String(r.date||'')>String(latest[r.tag].date||'')))latest[r.tag]=r;});
     let alerts=0;
     eqs.forEach(eq=>{
       const r=latest[eq.tag];if(!r)return;
-      const mAl=parseFloat(eq.motorVibAlarm||eq.vibAlarm||4.5);
-      const pAl=parseFloat(eq.pumpVibAlarm||eq.vibAlarm||4.5);
+      const mAl=parseFloat(eq.motorVibAlarm||2.8),pAl=parseFloat(eq.pumpVibAlarm||5.1);
       const vib=r.vib||{};
       let alarm=false;
-      [vib.mDV,vib.mDH,vib.mDA,vib.mNV,vib.mNH,vib.mNA].forEach(v=>{if(parseFloat(v)>=mAl)alarm=true;});
-      [vib.pDV,vib.pDH,vib.pDA,vib.pNV,vib.pNH,vib.pNA].forEach(v=>{if(parseFloat(v)>=pAl)alarm=true;});
+      [vib.mDV,vib.mDH,vib.mDA,vib.mNV,vib.mNH,vib.mNA].forEach(v=>{if(parseFloat(v||0)>=mAl)alarm=true;});
+      [vib.pDV,vib.pDH,vib.pDA,vib.pNV,vib.pNH,vib.pNA].forEach(v=>{if(parseFloat(v||0)>=pAl)alarm=true;});
       const brg=r.brg||{};
       if(brg.deC&&brg.deC!=='ok')alarm=true;
       if(brg.ndeC&&brg.ndeC!=='ok')alarm=true;
       if(alarm)alerts++;
     });
-    // Last PM date
-    const lp=recs.reduce((m,r)=>String(r.date)>m?String(r.date):m,'');
-    const lpTag=document.getElementById('motor-lastpm-tag');
-    if(lpTag&&lp){
-      // Format date Thai style
-      const d=new Date(lp+'T00:00:00');
-      const months=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-      lpTag.textContent='📅 Last PM: '+d.getDate()+' '+months[d.getMonth()]+' '+(d.getFullYear()+543);
-    }
-    if(tag){
-      if(alerts>0){tag.textContent='⚠ '+alerts+' Alert'+(alerts>1?'s':'');tag.className='tag tag-alert';}
-      else{tag.textContent='✓ All Normal';tag.className='tag tag-active';}
+    if(alertTag){
+      if(alerts>0){alertTag.textContent='⚠ '+alerts+' Alert'+(alerts>1?'s':'');alertTag.className='tag tag-alert';}
+      else{alertTag.textContent='✓ All Normal';alertTag.className='tag tag-active';}
     }
   }catch(e){
-    console.error(e);
-    if(tag){tag.textContent='⚠ —';tag.className='tag tag-alert';}
-    const lpTag=document.getElementById('motor-lastpm-tag');
+    console.error('loadStats:',e);
+    if(alertTag)alertTag.textContent='⚠ —';
     if(lpTag)lpTag.textContent='📅 —';
   }
 }
